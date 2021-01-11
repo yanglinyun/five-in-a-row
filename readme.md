@@ -1,6 +1,6 @@
 # 前端实现五子棋
 # 演示地址
-<a href ="https://yanglinyun.github.io/Chinese-chess/">https://yanglinyun.github.io/Chinese-chess/</a>
+<a href ="https://yanglinyun.github.io/five-in-a-row/">https://yanglinyun.github.io/five-in-a-row/</a>
 
 # 實現效果UI
 <img src="./实现效果.PNG">
