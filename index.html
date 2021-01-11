@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chinese chess</title>
+  <style>
+    body,
+    html {
+
+      padding: 0;
+      margin: 0;
+      height: 100vh;
+    }
+
+    #canvasWrap {
+      width: 500px;
+      height: 550px;
+      margin: 0 auto;
+    }
+
+    #currActive {
+      display: flex;
+      justify-content: space-between;
+      background-color: royalblue;
+      font-size: 2em;
+      font-weight: bold;
+      text-align: center;
+      color: white;
+    }
+
+    button {
+      background-color: red;
+      font-weight: bold;
+
+      font-size: 1em;
+    }
+
+    #canvas {
+      background: url("./checkBoard.jpg") center center;
+    }
+
+    #panel {
+      border: 5px dashed #000;
+      padding: 10px;
+      height: 40%;
+      overflow-y: scroll;
+    }
+
+    #ul {
+
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      justify-content: flex-start;
+      align-items: center;
+      flex-wrap: wrap;
+
+    }
+
+    #ul li {
+      display: inline;
+      padding: 2px;
+      border: 1px solid red;
+
+    }
+
+    footer {
+      text-align: center;
+      background-color: teal;
+      position: fixed;
+      width: 100%;
+      bottom: 0;
+      max-width: 500px;
+      left: 50%;
+      transform: translateX(-50%);
+    }
+  </style>
+  <script src="http://libs.baidu.com/jquery/1.9.1/jquery.min.js"></script>
+</head>
+
+<body>
+  <div id="canvasWrap">
+    <div id="currActive">
+      <button onclick="replay()">重玩</button>
+      <span id="currActivePlayer"></span>
+      <button onclick="retract()">悔棋(<span id="retractStep">0</span>)</button>
+    </div>
+    <canvas id="canvas" width="500" height="550"></canvas>
+    <div id="panel">
+      <ul id="ul"></ul>
+    </div>
+
+  </div>
+  <footer>
+    @熬一宿
+  </footer>
+  <script>
+    var stepHistory = []; //历史操作
+    function saveFive(step) {
+      if (stepHistory.length >= 6) {
+        stepHistory.shift();
+      }
+      stepHistory.push(step);
+    }
+
+    function updateRetractStep(count) {
+      if (count >= 1) {
+        $("#retractStep").text("" + (count - 1) + "");
+      }
+
+    }
+    var obj = {};
+    // 初始化
+    obj.init = function (args) {
+      var canvas = document.getElementById("canvas");
+      this.ctx = canvas.getContext("2d");
+      this.chunk = args && args.chunk ? args.chunk : 32;
+      this.radius = args && args.radius ? args.radius : 10;
+      this.CandidateCircleR = args && args.ccr ? args.ccr : 5;
+      $("#currActivePlayer").text("白方");
+      $("#retractStep").text("0");
+      this.steps = []; // 记录步骤
+      this.currActive = "white"; // 先下
+      this.init_back();
+      this.cheer_arr_ALL = this.createGraph(); //[{type:"black"x,y}];
+      $(canvas).unbind(); //方法移除被选元素的事件处理程序。
+      this.addEvent();
+      stepHistory = [];
+      stepHistory.push(JSON.stringify(this.cheer_arr_ALL));
+    }
+    obj.createGraph = function () {
+      var a = [];
+      for (var i = 0; i < 15; i++) { //行循环
+        var b = []; //辅助数组
+        for (var j = 0; j < 15; j++) { //列循环
+          b[j] = -1; //定义数组b的元素值
+        }
+        a[i] = b; //把数组b赋值给数组a
+      }
+      return a;
+    }
+    // 棋盘初始化
+    obj.init_back = function () {
+      this.drawRowLine();
+      this.drawColLine();
+      this.drawX(); // 画5点
+      this.drawText(); //标棋盘经纬度
+    }
+    // 画横线
+    obj.drawRowLine = function () {
+      for (var i = 1; i <= 15; i++) {
+        this.drawLine(1, i, 15, i);
+      }
+    }
+    // 画竖线
+    obj.drawColLine = function () {
+      for (var i = 1; i <= 15; i++) {
+        this.drawLine(i, 1, i, 15);
+      }
+    }
+    // 画直线
+    obj.drawLine = function (x0, y0, x1, y1, lw) {
+      var x0 = x0 * this.chunk;
+      var y0 = y0 * this.chunk;
+      var x1 = x1 * this.chunk;
+      var y1 = y1 * this.chunk;
+      this.ctx.beginPath();
+      this.ctx.strokeStyle = "#000";
+      this.ctx.lineWidth = lw ? lw : 1;
+      this.ctx.moveTo(x0, y0);
+      this.ctx.lineTo(x1, y1);
+      this.ctx.stroke();
+      this.ctx.closePath();
+    }
+    // 画#
+    obj.drawsharpS = function () {
+      this.round(2, 3);
+      this.round(8, 3);
+      this.round(1, 4);
+      this.round(3, 4);
+      this.round(5, 4);
+      this.round(7, 4);
+      this.round(9, 4);
+      this.round(2, 8);
+      this.round(8, 8);
+      this.round(1, 7);
+      this.round(3, 7);
+      this.round(5, 7);
+      this.round(7, 7);
+      this.round(9, 7);
+    }
+    // 画单个#
+    obj.round = function (x0, y0) {
+      var x0 = x0 * this.chunk;
+      var y0 = y0 * this.chunk;
+      this.ctx.beginPath();
+      this.ctx.strokeStyle = "#000";
+      this.ctx.lineWidth = 1;
+      if (x0 != this.chunk) {
+        // 左上
+        this.ctx.moveTo(x0 - 5, y0 - 10);
+        this.ctx.lineTo(x0 - 5, y0 - 5);
+        this.ctx.lineTo(x0 - 10, y0 - 5);
+        // 左下
+        this.ctx.moveTo(x0 - 5, y0 + 10);
+        this.ctx.lineTo(x0 - 5, y0 + 5);
+        this.ctx.lineTo(x0 - 10, y0 + 5);
+      }
+      if (x0 != this.chunk * 9) {
+        // 右上
+        this.ctx.moveTo(x0 + 5, y0 - 10);
+        this.ctx.lineTo(x0 + 5, y0 - 5);
+        this.ctx.lineTo(x0 + 10, y0 - 5);
+        // 右下
+        this.ctx.moveTo(x0 + 5, y0 + 10);
+        this.ctx.lineTo(x0 + 5, y0 + 5);
+        this.ctx.lineTo(x0 + 10, y0 + 5);
+      }
+      this.ctx.stroke();
+      this.ctx.closePath();
+    }
+    // 画5点
+    obj.drawX = function () {
+      this.drawPoiner(4, 4, 2);
+      this.drawPoiner(12, 4, 2);
+      this.drawPoiner(8, 8, 2);
+      this.drawPoiner(4, 12, 2);
+      this.drawPoiner(12, 12, 2);
+    }
+    //标棋盘经纬度
+    obj.drawText = function () {
+      this.ctx.fillStyle = "#000";
+      this.ctx.font = "bold 20px Courier New";
+      for (var i = 1; i <= 15; i++) {
+        this.ctx.fillText((16 - i).toString(), this.chunk * 1 - 30, this.chunk * i + 10); //文字,x,y
+        this.ctx.fillText(String.fromCharCode(64 + i), this.chunk * i - 5, this.chunk * 15 + 20);
+
+      }
+    }
+    /// 画5点
+    obj.drawPoiner = function (x, y, r) {
+      this.ctx.beginPath();
+      this.ctx.fillStyle = "#000";
+      this.ctx.strokeStyle = "#000";
+      this.ctx.lineWidth = 2;
+      this.ctx.arc(x * this.chunk, y * this.chunk, r, 0, Math.PI * 2, true); //fasle 顺时针
+      this.ctx.closePath();
+      this.ctx.fill();
+      this.ctx.stroke();
+    }
+    // 画棋子形状
+    obj.drawPiece = function (x, y, value) {
+      x = x + 1;
+      y = y + 1;
+      this.ctx.beginPath();
+      var bgcolor = "black";
+      var color = "black";
+      if (value == 1) {
+        bgcolor = "white";
+      }
+      this.ctx.fillStyle = bgcolor;
+      this.ctx.strokeStyle = color;
+      this.ctx.lineWidth = 2;
+      this.ctx.arc(x * this.chunk, y * this.chunk, this.radius, 0, Math.PI * 2, true); //fasle 顺时针
+      this.ctx.closePath();
+      this.ctx.fill();
+      this.ctx.stroke();
+    }
+    // 增加点击事件
+    obj.addEvent = function () {
+      var that = this;
+      $(canvas).on("mousedown", function (ev) {
+        for (var i = 1; i <= 15; i++) {
+          for (var j = 1; j <= 15; j++) {
+            var temp_i = i * that.chunk;
+            var temp_j = j * that.chunk;
+            //temp_i旗子基准点
+            //ev.offsetX 点击事件鼠标距离canvas左边的距离
+            var distanct = Math.sqrt(Math.pow(temp_i - ev.offsetX, 2) + Math.pow(temp_j - ev.offsetY, 2));
+
+            if (distanct <= that.radius) { //在旗子内就触发 拦截出该棋子外的区域点击事件
+
+              var x = i - 1;
+              var y = j - 1;
+
+              if (that.inArray(y, x)) { //位置上有棋子
+                return false;
+              }
+              //更新棋盘
+
+              that.cheer_arr_ALL[y][x] = that.currActive == "black" ? 0 : 1;
+              that.note(x + 1, y + 1);
+              if (that.isWin(y, x)) {
+                alert((that.currActive == "black" ? "黑" : "白") + "方胜");
+                replay();
+                return true;
+              }
+
+              that.updateChess();
+            }
+          };
+        }
+      });
+    }
+    // 记谱
+    obj.note = function (x, y) {
+      step = (this.currActive == "black" ? "黑" : "白") + "落" + String.fromCharCode(64 + x) + " " + (16 - y);
+      this.steps.push(step);
+    }
+    // 是否结束
+    obj.isWin = function (x, y) {
+      var num = this.currActive == "black" ? 0 : 1;
+      //8个方向判断
+      var count = 0;
+      for (var i = x - 1; i >= 0; i--) {
+        if (this.cheer_arr_ALL[i][y] == num) {
+          count++;
+        }
+        if (count >= 4) {
+          return true;
+        }
+      }
+      count = 0;
+      for (var i = x + 1; i < 15; i++) {
+        if (this.cheer_arr_ALL[i][y] == num) {
+          count++;
+        }
+        if (count >= 4) {
+          return true;
+        }
+      }
+      count = 0; //right
+      for (var i = y + 1; i < 15; i++) {
+        if (this.cheer_arr_ALL[x][i] == num) {
+          count++;
+        }
+        if (count >= 4) {
+          return true;
+        }
+      }
+      count = 0; //left
+      for (var i = y - 1; i >= 0; i--) {
+        if (this.cheer_arr_ALL[x][i] == num) {
+          count++;
+        }
+        if (count >= 4) {
+          return true;
+        }
+      }
+      count = 0; //top right
+      for (var i = 1; i <= 4; i++) {
+        var temp_x = x - i;
+        var temp_y = y + i;
+        if (temp_x >= 0 && temp_x <= 14 && temp_y >= 0 && temp_y <= 14 && this.cheer_arr_ALL[temp_x][temp_y] == num) {
+          count++;
+        }
+        if (count >= 4) {
+          return true;
+        }
+      }
+      count = 0; //top left
+      for (var i = 1; i <= 4; i++) {
+        var temp_x = x - i;
+        var temp_y = y - i;
+        if (temp_x >= 0 && temp_x <= 14 && temp_y >= 0 && temp_y <= 14 && this.cheer_arr_ALL[temp_x][temp_y] == num) {
+          count++;
+        }
+        if (count >= 4) {
+          return true;
+        }
+      }
+      count = 0; //bottom left
+      for (var i = 1; i <= 4; i++) {
+        var temp_x = x + i;
+        var temp_y = y - i;
+        if (temp_x >= 0 && temp_x <= 14 && temp_y >= 0 && temp_y <= 14 && this.cheer_arr_ALL[temp_x][temp_y] == num) {
+          count++;
+        }
+        if (count >= 4) {
+          return true;
+        }
+      }
+      count = 0; //bottom right
+      for (var i = 1; i <= 4; i++) {
+        var temp_x = x + i;
+        var temp_y = y + i;
+        if (temp_x >= 0 && temp_x <= 14 && temp_y >= 0 && temp_y <= 14 && this.cheer_arr_ALL[temp_x][temp_y] == num) {
+          count++;
+        }
+        if (count >= 4) {
+          return true;
+        }
+      }
+      return false;
+
+    }
+    // 更新棋局
+    obj.updateChess = function () {
+      this.ctx.clearRect(0, 0, canvas.width, canvas.height);
+      this.init_back();
+
+      saveFive(JSON.stringify(this.cheer_arr_ALL));
+      updateRetractStep(stepHistory.length);
+
+
+      for (var i = 0; i < this.cheer_arr_ALL.length; i++) {
+        for (var j = 0; j < this.cheer_arr_ALL[i].length; j++) {
+          var e = this.cheer_arr_ALL[j][i];
+          if (e != -1) {
+            this.drawPiece(i, j, e);
+          }
+        }
+      }
+
+      this.currActive = this.currActive == "black" ? "white" : "black";
+      $("#currActivePlayer").text(this.currActive == "black" ? "黑方" : "白方");
+      $("#ul").empty();
+      $.each(this.steps, function (iii, eee) {
+        $("#ul").append("<li>" + eee + "</li>");
+      });
+    }
+    obj.inArray = function (x, y) {
+      return this.cheer_arr_ALL[x][y] != -1;
+    }
+    obj.init();
+  </script>
+  <script>
+    function replay() {
+      obj.ctx.clearRect(0, 0, canvas.width, canvas.height);
+      obj.init();
+      $("#ul").empty()
+      return false;
+    }
+
+    function retract() {
+      if (stepHistory.length >= 2) {
+        obj.ctx.clearRect(0, 0, canvas.width, canvas.height);
+        obj.init_back();
+        var that = obj;
+        obj.cheer_arr_ALL = JSON.parse(stepHistory[stepHistory.length - 2]);
+        stepHistory.pop();
+        obj.currActive = obj.currActive == "white" ? "black" : "white";
+        $("#currActivePlayer").text(obj.currActive == "black" ? "黑方" : "白方");
+        for (var i = 0; i < obj.cheer_arr_ALL.length; i++) {
+          for (var j = 0; j < obj.cheer_arr_ALL[i].length; j++) {
+            var e = obj.cheer_arr_ALL[j][i];
+            if (e != -1) {
+              obj.drawPiece(i, j, e);
+            }
+          }
+        }
+
+        $("#ul").empty();
+        obj.steps.pop();
+        $.each(obj.steps, function (iii, eee) {
+          $("#ul").append("<li>" + eee + "</li>");
+        });
+        updateRetractStep(stepHistory.length);
+      }
+    }
+  </script>
+</body>
+
+</html>
